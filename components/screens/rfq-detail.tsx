@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabase";
 import { RFQ_DATA, VENDORS, Vendor } from "@/lib/data";
-import { StatusChip, FitBar } from "@/components/shell";
+import { StatusChip } from "@/components/shell";
 import { Icons } from "@/components/icons";
 
 type RfqRow = {
@@ -237,7 +237,6 @@ export function RfqDetail({ rfqId, onBack, onOpenVendor }: { rfqId: string; onBa
                 <th style={{ width: 130 }}>Status</th>
                 <th style={{ width: 110, textAlign: "right" }}>Unit price</th>
                 <th style={{ width: 90, textAlign: "right" }}>Lead</th>
-                <th style={{ width: 120 }}>Fit</th>
                 <th style={{ minWidth: 240 }}>Last action</th>
                 <th style={{ width: 110 }}></th>
                 <th style={{ width: 30 }}></th>
@@ -272,7 +271,6 @@ export function RfqDetail({ rfqId, onBack, onOpenVendor }: { rfqId: string; onBa
                   <td style={{ textAlign: "right", fontVariantNumeric: "tabular-nums", color: "var(--text-secondary)" }}>
                     {v.leadTime != null ? `${v.leadTime}d` : "—"}
                   </td>
-                  <td><FitBar score={v.fitScore} /></td>
                   <td>
                     <div className="row" style={{ gap: 8 }}>
                       {v.status === "calling" && <Icons.Phone size={13} style={{ color: "var(--warn)" }} />}
