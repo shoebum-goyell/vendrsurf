@@ -63,6 +63,7 @@ export function Topbar({ crumbs }: { crumbs: string[] }) {
 
 export function StatusChip({ status }: { status: VendorStatus | "active" | "closed" }) {
   const map: Record<string, { cls: string; label: string; dot?: boolean }> = {
+    discovered: { cls: "chip-neutral", label: "Discovered" },
     calling:   { cls: "chip-warn",    label: "Calling" },
     voicemail: { cls: "chip-neutral", label: "Voicemail left" },
     qualified: { cls: "chip-info",    label: "Qualified" },

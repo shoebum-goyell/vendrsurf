@@ -26,14 +26,14 @@ export const RFQ_DATA = {
   ],
 };
 
-export type VendorStatus = "calling" | "voicemail" | "qualified" | "quoted" | "emailing" | "declined";
+export type VendorStatus = "discovered" | "calling" | "voicemail" | "qualified" | "quoted" | "emailing" | "declined";
 
 export interface Vendor {
   id: string;
   name: string;
   location: string;
   employees: string;
-  contact: { name: string; role: string; linkedin: string; phone: string; email: string };
+  contact: { name: string; role: string; linkedin?: string; phone?: string; email?: string };
   status: VendorStatus;
   unitPrice: number | null;
   leadTime: number | null;

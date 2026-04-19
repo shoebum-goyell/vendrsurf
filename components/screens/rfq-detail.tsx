@@ -6,40 +6,103 @@ import { RFQ_DATA, VENDORS, Vendor } from "@/lib/data";
 import { StatusChip, FitBar } from "@/components/shell";
 import { Icons } from "@/components/icons";
 
-export function RfqDetail({ onBack, onOpenVendor }: { onBack: () => void; onOpenVendor: (id: string) => void }) {
-  const rfq = RFQ_DATA;
+type RfqRow = {
+  id: string;
+  title: string | null;
+  product_category: string | null;
+  product_description: string | null;
+  quantity: number | null;
+  unit_of_measure: string | null;
+  target_unit_price: number | null;
+  budget_min: number | null;
+  budget_max: number | null;
+  timeline_weeks: number | null;
+  delivery_destination: string | null;
+  location: string | null;
+  certifications: string[] | null;
+  created_at: string | null;
+};
+
+function mapVendor(v: Record<string, unknown>): Vendor {
+  const rawContact = (v.contact as Record<string, unknown> | null) ?? null;
+  const contact = rawContact
+    ? {
+        name: (rawContact.name as string) ?? "—",
+        role: (rawContact.role as string) ?? (rawContact.title as string) ?? "",
+        linkedin: rawContact.linkedin as string | undefined,
+        phone: rawContact.phone as string | undefined,
+        email: rawContact.email as string | undefined,
+      }
+    : { name: "—", role: "" };
+  return {
+    id: v.id as string,
+    name: (v.name as string) ?? "Unknown",
+    location: (v.location as string) ?? "—",
+    employees: (v.employees as string) ?? "—",
+    contact,
+    status: ((v.status as Vendor["status"]) ?? "discovered"),
+    unitPrice: (v.unit_price as number | null) ?? null,
+    leadTime: (v.lead_time as number | null) ?? null,
+    moq: (v.moq as number | null) ?? null,
+    nre: (v.nre as number | null) ?? null,
+    certs: (v.certs as string[]) ?? [],
+    capabilities: (v.capabilities as string[]) ?? [],
+    risk: (v.risk as string) ?? "—",
+    fitScore: (v.fit_score as number) ?? 0,
+    lastUpdate: (v.last_update as string) ?? "just now",
+    callDuration: (v.call_duration as string) ?? "0:00",
+    callOutcome: (v.call_outcome as string) ?? "Awaiting outreach",
+    summary: (v.summary as string) ?? "",
+  };
+}
+
+export function RfqDetail({ rfqId, onBack, onOpenVendor }: { rfqId: string; onBack: () => void; onOpenVendor: (id: string) => void }) {
+  const [rfqRow, setRfqRow] = useState<RfqRow | null>(null);
   const [filter, setFilter] = useState("all");
-  const [vendors, setVendors] = useState<Vendor[]>(VENDORS);
+  const [vendors, setVendors] = useState<Vendor[]>([]);
   const [loading, setLoading] = useState(true);
 
+  const isFixture = rfqId === RFQ_DATA.id;
+
   useEffect(() => {
-    supabase.from("vendors").select("*").eq("rfq_id", rfq.id).then(({ data }) => {
+    supabase.from("rfqs").select("*").eq("id", rfqId).maybeSingle().then(({ data }) => {
+      if (data) setRfqRow(data as RfqRow);
+    });
+  }, [rfqId]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const fetchVendors = async () => {
+      const { data } = await supabase.from("vendors").select("*").eq("rfq_id", rfqId);
+      if (cancelled) return;
       if (data && data.length > 0) {
-        const mapped = data.map((v: Record<string, unknown>) => ({
-          id: v.id as string,
-          name: v.name as string,
-          location: v.location as string,
-          employees: v.employees as string,
-          contact: v.contact as Vendor["contact"],
-          status: v.status as Vendor["status"],
-          unitPrice: v.unit_price as number | null,
-          leadTime: v.lead_time as number | null,
-          moq: v.moq as number | null,
-          nre: v.nre as number | null,
-          certs: (v.certs as string[]) ?? [],
-          capabilities: (v.capabilities as string[]) ?? [],
-          risk: v.risk as string,
-          fitScore: v.fit_score as number,
-          lastUpdate: v.last_update as string,
-          callDuration: v.call_duration as string,
-          callOutcome: v.call_outcome as string,
-          summary: v.summary as string,
-        }));
-        setVendors(mapped);
+        setVendors(data.map(mapVendor));
+      } else if (isFixture) {
+        setVendors(VENDORS);
+      } else {
+        setVendors([]);
       }
       setLoading(false);
-    });
-  }, [rfq.id]);
+    };
+    fetchVendors();
+    const poll = setInterval(fetchVendors, 5000);
+    return () => { cancelled = true; clearInterval(poll); };
+  }, [rfqId, isFixture]);
+
+  const rfq = rfqRow
+    ? {
+        id: rfqRow.id,
+        title: rfqRow.title ?? rfqRow.product_category ?? "Untitled RFQ",
+        summary: [
+          rfqRow.quantity != null ? `${rfqRow.quantity} ${rfqRow.unit_of_measure ?? "units"}` : null,
+          rfqRow.product_description,
+          rfqRow.delivery_destination,
+        ].filter(Boolean).join(" · "),
+        created: rfqRow.created_at ? new Date(rfqRow.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "—",
+        targetUnit: rfqRow.target_unit_price ?? 0,
+        walkAwayUnit: rfqRow.budget_max ?? 0,
+      }
+    : RFQ_DATA;
 
   // Live tick for calling vendors
   useEffect(() => {
@@ -60,6 +123,7 @@ export function RfqDetail({ onBack, onOpenVendor }: { onBack: () => void; onOpen
 
   const counts = {
     all: vendors.length,
+    discovered: vendors.filter((v) => v.status === "discovered").length,
     calling: vendors.filter((v) => v.status === "calling").length,
     qualified: vendors.filter((v) => ["qualified", "emailing"].includes(v.status)).length,
     quoted: vendors.filter((v) => v.status === "quoted").length,
@@ -89,7 +153,9 @@ export function RfqDetail({ onBack, onOpenVendor }: { onBack: () => void; onOpen
           </div>
           <h1 className="h1">{rfq.title}</h1>
           <div className="muted" style={{ marginTop: 4, fontSize: 13.5 }}>
-            {rfq.summary} · launched {rfq.created} · target ${rfq.targetUnit}/unit · walk-away ${rfq.walkAwayUnit}
+            {rfq.summary} · launched {rfq.created}
+            {rfq.targetUnit ? ` · target $${rfq.targetUnit}/unit` : ""}
+            {rfq.walkAwayUnit ? ` · walk-away $${rfq.walkAwayUnit}` : ""}
           </div>
         </div>
         <div className="spacer" />
@@ -124,6 +190,7 @@ export function RfqDetail({ onBack, onOpenVendor }: { onBack: () => void; onOpen
           {(
             [
               ["all", `All · ${counts.all}`],
+              ["discovered", `Discovered · ${counts.discovered}`],
               ["calling", `Calling · ${counts.calling}`],
               ["qualified", `Qualified · ${counts.qualified}`],
               ["quoted", `Quoted · ${counts.quoted}`],
