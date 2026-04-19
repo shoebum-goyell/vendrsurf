@@ -1,36 +1,39 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# VendrSurf
 
-## Getting Started
+AI-powered hardware procurement platform. Paste an RFQ, get a ranked vendor shortlist, and let the agent cold-call suppliers on your behalf — capturing pricing, lead times, and qualifications automatically.
 
-First, run the development server:
+Built at **Context Con 2026** hackathon.
+
+## What it does
+
+1. **RFQ creation** — fill in a structured form (product, quantity, budget, certifications, etc.) or paste a voice transcript and let Claude extract the fields.
+2. **Vendor discovery** — Claude derives search intent from the RFQ; Crust Data company + person search finds ranked, contact-enriched suppliers.
+3. **Automated calling** — Vapi voice agent cold-calls each vendor, qualifies them on your spec, and extracts unit price, lead time, MOQ, and NRE via structured AI analysis.
+4. **Live dashboard** — tracks each vendor through discovered → calling → qualified → quoted in real time. Call transcript and recording available on the vendor detail screen.
+
+## Stack
+
+- **Frontend**: Next.js 14 (App Router), deployed on Vercel
+- **Backend**: FastAPI on Railway — vendor discovery + Vapi call orchestration
+- **DB**: Supabase (Postgres + Storage)
+- **AI**: Claude (Anthropic) for RFQ parsing + vendor search planning; GPT-4o via Vapi for live call reasoning
+- **Voice**: Vapi + ElevenLabs (Sarah voice) + Deepgram Nova-3 transcription
+
+## Live demo
+
+**https://vendrsurf.vercel.app**
+
+## Local dev
 
 ```bash
+npm install
+cp .env.local.example .env.local   # fill in NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY, NEXT_PUBLIC_API_URL
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Repos
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
-
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
-
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+| Repo | Purpose |
+|---|---|
+| `vendrsurf` (this) | Next.js frontend |
+| `vendrsurf-backend` | FastAPI backend — discovery, calling, webhooks |
