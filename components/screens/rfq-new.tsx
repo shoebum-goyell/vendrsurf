@@ -6,7 +6,7 @@ import { Icons } from "@/components/icons";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
-type ParsedFields = {
+type Fields = {
   location: string;
   product_category: string;
   quantity: number | "";
@@ -15,22 +15,13 @@ type ParsedFields = {
   timeline_weeks: number | "";
 };
 
-const EMPTY: ParsedFields = {
+const EMPTY: Fields = {
   location: "",
   product_category: "",
   quantity: "",
   budget_min: "",
   budget_max: "",
   timeline_weeks: "",
-};
-
-const FIXTURE: ParsedFields = {
-  location: "USA",
-  product_category: "CNC-machined aluminum enclosures",
-  quantity: 500,
-  budget_min: 35,
-  budget_max: 58,
-  timeline_weeks: 6,
 };
 
 function genRfqId() {
@@ -40,50 +31,13 @@ function genRfqId() {
 }
 
 export function RfqNew({ onBack, onCreated }: { onBack: () => void; onCreated: (id: string) => void }) {
-  const [text, setText] = useState("");
-  const [parsing, setParsing] = useState(false);
-  const [parsed, setParsed] = useState<ParsedFields | null>(null);
-  const [fields, setFields] = useState<ParsedFields>(EMPTY);
-  const [errors, setErrors] = useState<Partial<Record<keyof ParsedFields, string>>>({});
+  const [fields, setFields] = useState<Fields>(EMPTY);
+  const [errors, setErrors] = useState<Partial<Record<keyof Fields, string>>>({});
   const [submitting, setSubmitting] = useState(false);
-  const [parseError, setParseError] = useState<string | null>(null);
-
-  const parse = async () => {
-    if (!text.trim()) return;
-    setParsing(true);
-    setParseError(null);
-    try {
-      const res = await fetch(`${API_URL}/parse-rfq`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text }),
-      });
-      if (!res.ok) throw new Error(`parse-rfq ${res.status}`);
-      const json = await res.json();
-      if (json.error) throw new Error(json.message || json.error);
-      const f = json.fields as Partial<ParsedFields>;
-      const next: ParsedFields = {
-        location: f.location ?? "",
-        product_category: f.product_category ?? "",
-        quantity: (f.quantity as number) ?? "",
-        budget_min: (f.budget_min as number) ?? "",
-        budget_max: (f.budget_max as number) ?? "",
-        timeline_weeks: (f.timeline_weeks as number) ?? "",
-      };
-      setFields(next);
-      setParsed(next);
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : "parse failed";
-      setParseError(`Parser unavailable (${msg}) — loaded a best-guess draft you can edit.`);
-      setFields(FIXTURE);
-      setParsed(FIXTURE);
-    } finally {
-      setParsing(false);
-    }
-  };
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   const validate = (): boolean => {
-    const e: Partial<Record<keyof ParsedFields, string>> = {};
+    const e: Partial<Record<keyof Fields, string>> = {};
     if (!/^[A-Z]{3}$/.test(fields.location.trim())) e.location = "ISO3 country code (e.g. USA)";
     if (!fields.product_category.trim()) e.product_category = "Required";
     if (fields.quantity === "" || Number(fields.quantity) <= 0) e.quantity = "Must be > 0";
@@ -99,6 +53,7 @@ export function RfqNew({ onBack, onCreated }: { onBack: () => void; onCreated: (
   const submit = async () => {
     if (!validate()) return;
     setSubmitting(true);
+    setSubmitError(null);
     const id = genRfqId();
     const row = {
       id,
@@ -114,7 +69,7 @@ export function RfqNew({ onBack, onCreated }: { onBack: () => void; onCreated: (
     const { error } = await supabase.from("rfqs").insert(row);
     if (error) {
       setSubmitting(false);
-      setParseError(`Could not save RFQ: ${error.message}`);
+      setSubmitError(`Could not save RFQ: ${error.message}`);
       return;
     }
     fetch(`${API_URL}/discover-vendors`, {
@@ -125,7 +80,7 @@ export function RfqNew({ onBack, onCreated }: { onBack: () => void; onCreated: (
     onCreated(id);
   };
 
-  const set = <K extends keyof ParsedFields>(k: K, v: ParsedFields[K]) => {
+  const set = <K extends keyof Fields>(k: K, v: Fields[K]) => {
     setFields((f) => ({ ...f, [k]: v }));
     if (errors[k]) setErrors((e) => ({ ...e, [k]: undefined }));
   };
@@ -143,105 +98,80 @@ export function RfqNew({ onBack, onCreated }: { onBack: () => void; onCreated: (
 
       <h1 className="h1">New RFQ</h1>
       <div className="muted" style={{ marginTop: 4, fontSize: 13.5, marginBottom: 20 }}>
-        Describe what you need to source. We&apos;ll extract the structured details — you can edit everything before submitting.
+        Fill in the sourcing details. All fields are required.
       </div>
 
-      <div className="card card-pad" style={{ marginBottom: 16 }}>
-        <label className="tiny" style={{ display: "block", marginBottom: 8, color: "var(--text-secondary)", fontWeight: 600 }}>
-          Procurement request
-        </label>
-        <textarea
-          className="textarea"
-          rows={6}
-          placeholder="e.g. Need 500 CNC-machined aluminum enclosures, anodized, shipped to our Austin, TX facility. Target around $42/unit, walk-away at $58. Need them within 6 weeks."
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-        />
-        <div className="row" style={{ marginTop: 12, justifyContent: "flex-end", gap: 8 }}>
-          {parseError && <div className="tiny" style={{ color: "var(--warn)", marginRight: "auto" }}>{parseError}</div>}
-          <button className="btn btn-primary" onClick={parse} disabled={parsing || !text.trim()}>
-            {parsing ? "Parsing…" : parsed ? "Re-parse" : "Parse"}
+      <div className="card card-pad">
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+          <Field label="Product / category *" error={errors.product_category} full>
+            <input
+              className="input"
+              value={fields.product_category}
+              onChange={(e) => set("product_category", e.target.value)}
+              placeholder="CNC-machined aluminum enclosures"
+            />
+          </Field>
+          <Field label="Location (ISO3) *" error={errors.location}>
+            <input
+              className="input mono"
+              value={fields.location}
+              maxLength={3}
+              onChange={(e) => set("location", e.target.value.toUpperCase())}
+              placeholder="USA"
+            />
+          </Field>
+          <Field label="Quantity *" error={errors.quantity}>
+            <input
+              className="input"
+              type="number"
+              min={1}
+              value={numVal(fields.quantity)}
+              onChange={(e) => set("quantity", parseNum(e.target.value))}
+              placeholder="500"
+            />
+          </Field>
+          <Field label="Budget min (USD/unit) *" error={errors.budget_min}>
+            <input
+              className="input"
+              type="number"
+              min={0}
+              step="0.01"
+              value={numVal(fields.budget_min)}
+              onChange={(e) => set("budget_min", parseNum(e.target.value))}
+              placeholder="35"
+            />
+          </Field>
+          <Field label="Budget max (USD/unit) *" error={errors.budget_max}>
+            <input
+              className="input"
+              type="number"
+              min={0}
+              step="0.01"
+              value={numVal(fields.budget_max)}
+              onChange={(e) => set("budget_max", parseNum(e.target.value))}
+              placeholder="58"
+            />
+          </Field>
+          <Field label="Timeline (weeks) *" error={errors.timeline_weeks}>
+            <input
+              className="input"
+              type="number"
+              min={1}
+              value={numVal(fields.timeline_weeks)}
+              onChange={(e) => set("timeline_weeks", parseNum(e.target.value))}
+              placeholder="6"
+            />
+          </Field>
+        </div>
+
+        <div className="row" style={{ marginTop: 20, justifyContent: "flex-end", gap: 8 }}>
+          {submitError && <div className="tiny" style={{ color: "var(--warn)", marginRight: "auto" }}>{submitError}</div>}
+          <button className="btn" onClick={onBack} disabled={submitting}>Cancel</button>
+          <button className="btn btn-primary" onClick={submit} disabled={submitting}>
+            {submitting ? "Creating…" : "Create RFQ & start outreach"}
           </button>
         </div>
       </div>
-
-      {parsed && (
-        <div className="card card-pad">
-          <h2 className="h2" style={{ marginBottom: 4 }}>Structured details</h2>
-          <div className="muted" style={{ fontSize: 13, marginBottom: 18 }}>
-            Required fields are marked. Edit anything that doesn&apos;t look right.
-          </div>
-
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
-            <Field label="Product / category *" error={errors.product_category} full>
-              <input
-                className="input"
-                value={fields.product_category}
-                onChange={(e) => set("product_category", e.target.value)}
-                placeholder="CNC-machined aluminum enclosures"
-              />
-            </Field>
-            <Field label="Location (ISO3) *" error={errors.location}>
-              <input
-                className="input mono"
-                value={fields.location}
-                maxLength={3}
-                onChange={(e) => set("location", e.target.value.toUpperCase())}
-                placeholder="USA"
-              />
-            </Field>
-            <Field label="Quantity *" error={errors.quantity}>
-              <input
-                className="input"
-                type="number"
-                min={1}
-                value={numVal(fields.quantity)}
-                onChange={(e) => set("quantity", parseNum(e.target.value))}
-                placeholder="500"
-              />
-            </Field>
-            <Field label="Budget min (USD/unit) *" error={errors.budget_min}>
-              <input
-                className="input"
-                type="number"
-                min={0}
-                step="0.01"
-                value={numVal(fields.budget_min)}
-                onChange={(e) => set("budget_min", parseNum(e.target.value))}
-                placeholder="35"
-              />
-            </Field>
-            <Field label="Budget max (USD/unit) *" error={errors.budget_max}>
-              <input
-                className="input"
-                type="number"
-                min={0}
-                step="0.01"
-                value={numVal(fields.budget_max)}
-                onChange={(e) => set("budget_max", parseNum(e.target.value))}
-                placeholder="58"
-              />
-            </Field>
-            <Field label="Timeline (weeks) *" error={errors.timeline_weeks}>
-              <input
-                className="input"
-                type="number"
-                min={1}
-                value={numVal(fields.timeline_weeks)}
-                onChange={(e) => set("timeline_weeks", parseNum(e.target.value))}
-                placeholder="6"
-              />
-            </Field>
-          </div>
-
-          <div className="row" style={{ marginTop: 20, justifyContent: "flex-end", gap: 8 }}>
-            <button className="btn" onClick={onBack} disabled={submitting}>Cancel</button>
-            <button className="btn btn-primary" onClick={submit} disabled={submitting}>
-              {submitting ? "Creating…" : "Create RFQ & start outreach"}
-            </button>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
