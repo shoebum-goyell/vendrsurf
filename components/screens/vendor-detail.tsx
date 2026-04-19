@@ -457,12 +457,6 @@ on behalf of Blackbird Robotics`
                       <span className="tiny">/ unit × 500</span>
                     </div>
                   </div>
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, fontSize: 13 }}>
-                    <div><div className="tiny" style={{ marginBottom: 2 }}>Lead time</div><div style={{ fontWeight: 600 }}>{vendor.leadTime} days ARO</div></div>
-                    <div><div className="tiny" style={{ marginBottom: 2 }}>MOQ</div><div style={{ fontWeight: 600 }}>{vendor.moq} units</div></div>
-                    <div><div className="tiny" style={{ marginBottom: 2 }}>NRE / tooling</div><div style={{ fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>${vendor.nre?.toLocaleString()}</div></div>
-                    <div><div className="tiny" style={{ marginBottom: 2 }}>Payment</div><div style={{ fontWeight: 600 }}>2% / net 15</div></div>
-                  </div>
                   <hr className="hr" style={{ margin: "14px 0 10px" }} />
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
                     <span className="muted" style={{ fontSize: 12.5 }}>Total contract value</span>
