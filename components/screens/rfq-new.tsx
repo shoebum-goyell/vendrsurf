@@ -6,28 +6,54 @@ import { Icons } from "@/components/icons";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
+const UOM_OPTIONS = ["units", "kg", "tons", "meters", "liters", "pieces"] as const;
+const PAYMENT_OPTIONS = ["", "advance", "net_30", "net_60", "net_90"] as const;
+
+type Uom = (typeof UOM_OPTIONS)[number];
+type PaymentTerms = (typeof PAYMENT_OPTIONS)[number];
+
 type Fields = {
   location: string;
   product_category: string;
+  product_description: string;
   quantity: number | "";
+  unit_of_measure: Uom;
   budget_min: number | "";
   budget_max: number | "";
+  target_unit_price: number | "";
   timeline_weeks: number | "";
+  delivery_destination: string;
+  certifications: string;
+  payment_terms: PaymentTerms;
+  sample_required: boolean;
+  recurring: boolean;
 };
 
 const EMPTY: Fields = {
   location: "",
   product_category: "",
+  product_description: "",
   quantity: "",
+  unit_of_measure: "units",
   budget_min: "",
   budget_max: "",
+  target_unit_price: "",
   timeline_weeks: "",
+  delivery_destination: "",
+  certifications: "",
+  payment_terms: "",
+  sample_required: false,
+  recurring: false,
 };
 
 function genRfqId() {
   const yr = new Date().getFullYear();
   const suffix = crypto.randomUUID().slice(0, 8);
   return `RFQ-${yr}-${suffix}`;
+}
+
+function splitCerts(s: string): string[] {
+  return s.split(",").map((x) => x.trim()).filter(Boolean);
 }
 
 export function RfqNew({ onBack, onCreated }: { onBack: () => void; onCreated: (id: string) => void }) {
@@ -40,12 +66,15 @@ export function RfqNew({ onBack, onCreated }: { onBack: () => void; onCreated: (
     const e: Partial<Record<keyof Fields, string>> = {};
     if (!/^[A-Z]{3}$/.test(fields.location.trim())) e.location = "ISO3 country code (e.g. USA)";
     if (!fields.product_category.trim()) e.product_category = "Required";
+    if (!fields.product_description.trim()) e.product_description = "Required";
     if (fields.quantity === "" || Number(fields.quantity) <= 0) e.quantity = "Must be > 0";
     if (fields.budget_min === "" || Number(fields.budget_min) < 0) e.budget_min = "Required";
     if (fields.budget_max === "" || Number(fields.budget_max) <= 0) e.budget_max = "Required";
     if (fields.budget_min !== "" && fields.budget_max !== "" && Number(fields.budget_min) > Number(fields.budget_max))
       e.budget_max = "Max must be ≥ min";
+    if (fields.target_unit_price !== "" && Number(fields.target_unit_price) < 0) e.target_unit_price = "Must be ≥ 0";
     if (fields.timeline_weeks === "" || Number(fields.timeline_weeks) <= 0) e.timeline_weeks = "Must be > 0";
+    if (!fields.delivery_destination.trim()) e.delivery_destination = "Required (city, country)";
     setErrors(e);
     return Object.keys(e).length === 0;
   };
@@ -62,9 +91,17 @@ export function RfqNew({ onBack, onCreated }: { onBack: () => void; onCreated: (
       quantity: Number(fields.quantity),
       location: fields.location.toUpperCase(),
       product_category: fields.product_category,
+      product_description: fields.product_description,
+      unit_of_measure: fields.unit_of_measure,
       budget_min: Number(fields.budget_min),
       budget_max: Number(fields.budget_max),
+      target_unit_price: fields.target_unit_price === "" ? null : Number(fields.target_unit_price),
       timeline_weeks: Number(fields.timeline_weeks),
+      delivery_destination: fields.delivery_destination,
+      certifications: splitCerts(fields.certifications),
+      payment_terms: fields.payment_terms === "" ? null : fields.payment_terms,
+      sample_required: fields.sample_required,
+      recurring: fields.recurring,
     };
     const { error } = await supabase.from("rfqs").insert(row);
     if (error) {
@@ -98,7 +135,7 @@ export function RfqNew({ onBack, onCreated }: { onBack: () => void; onCreated: (
 
       <h1 className="h1">New RFQ</h1>
       <div className="muted" style={{ marginTop: 4, fontSize: 13.5, marginBottom: 20 }}>
-        Fill in the sourcing details. All fields are required.
+        Fill in the sourcing details. Starred fields are required; the rest give the voice agent more to negotiate with.
       </div>
 
       <div className="card card-pad">
@@ -111,6 +148,18 @@ export function RfqNew({ onBack, onCreated }: { onBack: () => void; onCreated: (
               placeholder="CNC-machined aluminum enclosures"
             />
           </Field>
+
+          <Field label="Product description *" error={errors.product_description} full>
+            <textarea
+              className="input"
+              rows={3}
+              value={fields.product_description}
+              onChange={(e) => set("product_description", e.target.value)}
+              placeholder="6061-T6 aluminum, 120×80×25mm, ±0.05mm tolerance, anodized black, threaded inserts on 4 corners"
+              style={{ resize: "vertical", fontFamily: "inherit" }}
+            />
+          </Field>
+
           <Field label="Location (ISO3) *" error={errors.location}>
             <input
               className="input mono"
@@ -120,6 +169,15 @@ export function RfqNew({ onBack, onCreated }: { onBack: () => void; onCreated: (
               placeholder="USA"
             />
           </Field>
+          <Field label="Delivery destination *" error={errors.delivery_destination}>
+            <input
+              className="input"
+              value={fields.delivery_destination}
+              onChange={(e) => set("delivery_destination", e.target.value)}
+              placeholder="Austin, USA"
+            />
+          </Field>
+
           <Field label="Quantity *" error={errors.quantity}>
             <input
               className="input"
@@ -130,6 +188,16 @@ export function RfqNew({ onBack, onCreated }: { onBack: () => void; onCreated: (
               placeholder="500"
             />
           </Field>
+          <Field label="Unit of measure *">
+            <select
+              className="input"
+              value={fields.unit_of_measure}
+              onChange={(e) => set("unit_of_measure", e.target.value as Uom)}
+            >
+              {UOM_OPTIONS.map((u) => <option key={u} value={u}>{u}</option>)}
+            </select>
+          </Field>
+
           <Field label="Budget min (USD/unit) *" error={errors.budget_min}>
             <input
               className="input"
@@ -152,6 +220,18 @@ export function RfqNew({ onBack, onCreated }: { onBack: () => void; onCreated: (
               placeholder="58"
             />
           </Field>
+
+          <Field label="Target unit price (USD)" error={errors.target_unit_price}>
+            <input
+              className="input"
+              type="number"
+              min={0}
+              step="0.01"
+              value={numVal(fields.target_unit_price)}
+              onChange={(e) => set("target_unit_price", parseNum(e.target.value))}
+              placeholder="42"
+            />
+          </Field>
           <Field label="Timeline (weeks) *" error={errors.timeline_weeks}>
             <input
               className="input"
@@ -161,6 +241,48 @@ export function RfqNew({ onBack, onCreated }: { onBack: () => void; onCreated: (
               onChange={(e) => set("timeline_weeks", parseNum(e.target.value))}
               placeholder="6"
             />
+          </Field>
+
+          <Field label="Certifications (comma-separated)" full>
+            <input
+              className="input"
+              value={fields.certifications}
+              onChange={(e) => set("certifications", e.target.value)}
+              placeholder="RoHS, ISO 9001, REACH"
+            />
+          </Field>
+
+          <Field label="Payment terms">
+            <select
+              className="input"
+              value={fields.payment_terms}
+              onChange={(e) => set("payment_terms", e.target.value as PaymentTerms)}
+            >
+              <option value="">—</option>
+              {PAYMENT_OPTIONS.filter(Boolean).map((p) => (
+                <option key={p} value={p}>{p.replace("_", " ")}</option>
+              ))}
+            </select>
+          </Field>
+          <Field label="Other">
+            <div className="row" style={{ gap: 16, paddingTop: 8 }}>
+              <label className="row" style={{ gap: 6, fontSize: 13 }}>
+                <input
+                  type="checkbox"
+                  checked={fields.sample_required}
+                  onChange={(e) => set("sample_required", e.target.checked)}
+                />
+                Sample required
+              </label>
+              <label className="row" style={{ gap: 6, fontSize: 13 }}>
+                <input
+                  type="checkbox"
+                  checked={fields.recurring}
+                  onChange={(e) => set("recurring", e.target.checked)}
+                />
+                Recurring order
+              </label>
+            </div>
           </Field>
         </div>
 
