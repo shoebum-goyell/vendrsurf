@@ -15,7 +15,7 @@ interface RfqRow {
   target_unit: number | null;
 }
 
-export function Dashboard({ onOpenRfq }: { onOpenRfq: (id: string) => void }) {
+export function Dashboard({ onOpenRfq, onNewRfq }: { onOpenRfq: (id: string) => void; onNewRfq: () => void }) {
   const [rfqs, setRfqs] = useState(DASHBOARD_RFQS);
   const [loading, setLoading] = useState(true);
 
@@ -54,7 +54,7 @@ export function Dashboard({ onOpenRfq }: { onOpenRfq: (id: string) => void }) {
           </div>
         </div>
         <div className="spacer" />
-        <button className="btn btn-primary" onClick={() => {}}>
+        <button className="btn btn-primary" onClick={onNewRfq}>
           <Icons.Plus size={13} /> New RFQ
         </button>
       </div>

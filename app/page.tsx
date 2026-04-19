@@ -4,9 +4,10 @@ import { useState, useEffect } from "react";
 import { Sidebar, Topbar } from "@/components/shell";
 import { Dashboard } from "@/components/screens/dashboard";
 import { RfqDetail } from "@/components/screens/rfq-detail";
+import { RfqNew } from "@/components/screens/rfq-new";
 import { VendorDetail } from "@/components/screens/vendor-detail";
 
-type View = "dashboard" | "rfq" | "vendor";
+type View = "dashboard" | "rfq-new" | "rfq" | "vendor";
 
 export default function Home() {
   const [view, setView] = useState<View>(() => {
@@ -27,21 +28,24 @@ export default function Home() {
   useEffect(() => { localStorage.setItem("vs_vendor", openVendorId); }, [openVendorId]);
 
   const goDashboard = () => setView("dashboard");
+  const goNewRfq = () => setView("rfq-new");
   const goRfq = (id: string) => { setOpenRfqId(id); setView("rfq"); };
   const goVendor = (id: string) => { setOpenVendorId(id); setView("vendor"); };
 
   const crumbs = () => {
     if (view === "dashboard") return ["Dashboard"];
+    if (view === "rfq-new") return ["Dashboard", "New RFQ"];
     if (view === "rfq") return ["Dashboard", "CNC-machined aluminum enclosures"];
     return ["Dashboard", "CNC-machined aluminum enclosures", openVendorId];
   };
 
   return (
     <div className="app">
-      <Sidebar onHome={goDashboard} onNewRfq={() => {}} />
+      <Sidebar onHome={goDashboard} onNewRfq={goNewRfq} />
       <main className="main">
         <Topbar crumbs={crumbs()} />
-        {view === "dashboard" && <Dashboard onOpenRfq={goRfq} />}
+        {view === "dashboard" && <Dashboard onOpenRfq={goRfq} onNewRfq={goNewRfq} />}
+        {view === "rfq-new" && <RfqNew onBack={goDashboard} onCreated={goRfq} />}
         {view === "rfq" && <RfqDetail onBack={goDashboard} onOpenVendor={goVendor} />}
         {view === "vendor" && <VendorDetail vendorId={openVendorId} onBack={() => setView("rfq")} />}
       </main>
