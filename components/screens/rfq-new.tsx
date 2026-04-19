@@ -109,11 +109,23 @@ export function RfqNew({ onBack, onCreated }: { onBack: () => void; onCreated: (
       setSubmitError(`Could not save RFQ: ${error.message}`);
       return;
     }
-    fetch(`${API_URL}/discover-vendors`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ rfq_id: id, location: row.location, product_category: row.product_category }),
-    }).catch(() => {});
+    try {
+      const res = await fetch(`${API_URL}/discover-vendors`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ rfq_id: id, location: row.location, product_category: row.product_category }),
+      });
+      if (!res.ok) {
+        setSubmitting(false);
+        setSubmitError(`RFQ saved, but vendor discovery failed (${res.status}). Try again from the RFQ detail page.`);
+        return;
+      }
+    } catch (err) {
+      setSubmitting(false);
+      const msg = err instanceof Error ? err.message : "network error";
+      setSubmitError(`RFQ saved, but could not reach discovery service: ${msg}`);
+      return;
+    }
     onCreated(id);
   };
 
