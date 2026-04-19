@@ -46,7 +46,7 @@ export default function Home() {
         <Topbar crumbs={crumbs()} />
         {view === "dashboard" && <Dashboard onOpenRfq={goRfq} onNewRfq={goNewRfq} />}
         {view === "rfq-new" && <RfqNew onBack={goDashboard} onCreated={goRfq} />}
-        {view === "rfq" && <RfqDetail onBack={goDashboard} onOpenVendor={goVendor} />}
+        {view === "rfq" && <RfqDetail rfqId={openRfqId} onBack={goDashboard} onOpenVendor={goVendor} />}
         {view === "vendor" && <VendorDetail vendorId={openVendorId} onBack={() => setView("rfq")} />}
       </main>
     </div>
