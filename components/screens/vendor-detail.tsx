@@ -153,12 +153,42 @@ on behalf of Blackbird Robotics`
         payload: Record<string, unknown> | null;
         created_at: string;
       }>;
-      const callEventCards: ThreadEvent[] = callEvs.map((ce) => ({
-        kind: "agent-note" as const,
-        who: "Vapi · VendrSurf Agent",
-        when: new Date(ce.created_at).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }),
-        body: `${ce.event_type}${ce.status ? ` · ${ce.status}` : ""}${ce.payload ? ` — ${JSON.stringify(ce.payload).slice(0, 240)}` : ""}`,
-      }));
+      const completedEv = callEvs.find((ce) => ce.event_type === "call_complete");
+      if (completedEv?.payload) {
+        const p = completedEv.payload as Record<string, unknown>;
+        setCallComplete({
+          messages: (p.messages as Array<{ role: string; message: string; time?: number }>) ?? [],
+          transcript_text: (p.transcript as string) ?? null,
+          recording_url: (p.recording_url as string) ?? null,
+          summary: (p.summary as string) ?? null,
+          outcome: (p.outcome as string) ?? null,
+          duration_seconds: p.duration_seconds != null ? Number(p.duration_seconds) : null,
+          created_at: completedEv.created_at,
+        });
+      }
+      const fmtDur = (secs: number) =>
+        `${Math.floor(secs / 60)}:${String(Math.round(secs % 60)).padStart(2, "0")}`;
+      const callEventCards: ThreadEvent[] = callEvs.map((ce) => {
+        const when = new Date(ce.created_at).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+        if (ce.event_type === "call_complete" && ce.payload) {
+          const p = ce.payload as Record<string, unknown>;
+          const outcome = (p.outcome as string) ?? "completed";
+          const dur = p.duration_seconds != null ? fmtDur(Number(p.duration_seconds)) : "—";
+          const snippet = (p.summary as string | undefined)?.slice(0, 140);
+          return {
+            kind: "agent-note" as const,
+            who: "VendrSurf Agent",
+            when,
+            body: `Call complete · ${dur} · outcome: ${outcome}${snippet ? ` — "${snippet}"` : ""}`,
+          };
+        }
+        return {
+          kind: "agent-note" as const,
+          who: "Vapi · VendrSurf Agent",
+          when,
+          body: `${ce.event_type}${ce.status ? ` · ${ce.status}` : ""}`,
+        };
+      });
       const combined = [...thread, ...callEventCards];
       if (combined.length > 0) setEvents(combined);
       else if (!fixtureVendor) setEvents([]);
@@ -199,6 +229,16 @@ on behalf of Blackbird Robotics`
         summary: row.summary ?? "",
       }
     : (fixtureVendor ?? VENDORS[0]);
+
+  const [callComplete, setCallComplete] = useState<{
+    messages: Array<{ role: string; message: string; time?: number }>;
+    transcript_text: string | null;
+    recording_url: string | null;
+    summary: string | null;
+    outcome: string | null;
+    duration_seconds: number | null;
+    created_at: string;
+  } | null>(null);
 
   const [calling, setCalling] = useState(false);
   const [callMsg, setCallMsg] = useState<string | null>(null);
@@ -276,8 +316,19 @@ on behalf of Blackbird Robotics`
           )}
 
           {tab === "transcript" && (() => {
-            const callEv = events.find((e) => e.kind === "call");
-            if (!callEv || callEv.kind !== "call") return null;
+            if (!callComplete) {
+              return (
+                <div className="card card-pad">
+                  <div className="muted" style={{ fontSize: 13 }}>No transcript yet — trigger a call to see it here.</div>
+                </div>
+              );
+            }
+            const { messages, transcript_text, recording_url, outcome, duration_seconds, created_at } = callComplete;
+            const dur = duration_seconds != null
+              ? `${Math.floor(duration_seconds / 60)}:${String(Math.round(duration_seconds % 60)).padStart(2, "0")}`
+              : "—";
+            const when = new Date(created_at).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+            const lines = messages.length > 0 ? messages : null;
             return (
               <div className="card">
                 <div className="card-header" style={{ justifyContent: "space-between" }}>
@@ -287,21 +338,33 @@ on behalf of Blackbird Robotics`
                     </div>
                     <div>
                       <div style={{ fontWeight: 600, fontSize: 13.5 }}>Round 1 qualification call</div>
-                      <div className="tiny">{callEv.when} · {callEv.duration} · <strong style={{ color: "var(--pos)" }}>Qualified</strong></div>
+                      <div className="tiny">{when} · {dur} · <strong style={{ color: "var(--pos)" }}>{outcome ?? "completed"}</strong></div>
                     </div>
                   </div>
-                  <button className="btn btn-ghost btn-sm"><Icons.Download size={12} /> Download</button>
                 </div>
-                <div className="card-body" style={{ padding: "16px 20px" }}>
-                  <div className="transcript">
-                    {callEv.transcript?.map((l, i) => (
-                      <div key={i} className="trs-line">
-                        <div className="trs-time">{l.t}</div>
-                        <div className={`trs-who ${l.side === "agent" ? "agent" : ""}`}>{l.who}</div>
-                        <div style={{ color: l.side === "agent" ? "var(--text)" : "var(--text-secondary)" }}>{l.line}</div>
-                      </div>
-                    ))}
+                {recording_url && (
+                  <div style={{ padding: "12px 20px", borderBottom: "1px solid var(--border)" }}>
+                    <audio controls src={recording_url} style={{ width: "100%", height: 36 }} />
                   </div>
+                )}
+                <div className="card-body" style={{ padding: "16px 20px" }}>
+                  {lines ? (
+                    <div className="transcript">
+                      {lines.map((l, i) => {
+                        const isAgent = l.role === "assistant" || l.role === "agent";
+                        return (
+                          <div key={i} className="trs-line">
+                            <div className={`trs-who ${isAgent ? "agent" : ""}`}>{isAgent ? "Agent" : "Vendor"}</div>
+                            <div style={{ color: isAgent ? "var(--text)" : "var(--text-secondary)" }}>{l.message}</div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : transcript_text ? (
+                    <pre style={{ whiteSpace: "pre-wrap", fontSize: 12.5, color: "var(--text-secondary)", lineHeight: 1.6, margin: 0 }}>{transcript_text}</pre>
+                  ) : (
+                    <div className="muted" style={{ fontSize: 13 }}>Transcript not available.</div>
+                  )}
                 </div>
               </div>
             );
