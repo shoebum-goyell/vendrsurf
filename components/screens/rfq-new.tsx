@@ -35,8 +35,8 @@ const FIXTURE: ParsedFields = {
 
 function genRfqId() {
   const yr = new Date().getFullYear();
-  const rand = Math.floor(1000 + Math.random() * 9000);
-  return `RFQ-${yr}-${rand}`;
+  const suffix = crypto.randomUUID().slice(0, 8);
+  return `RFQ-${yr}-${suffix}`;
 }
 
 export function RfqNew({ onBack, onCreated }: { onBack: () => void; onCreated: (id: string) => void }) {
@@ -72,8 +72,9 @@ export function RfqNew({ onBack, onCreated }: { onBack: () => void; onCreated: (
       };
       setFields(next);
       setParsed(next);
-    } catch {
-      setParseError("Couldn't reach parser — loaded a best-guess draft you can edit.");
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "parse failed";
+      setParseError(`Parser unavailable (${msg}) — loaded a best-guess draft you can edit.`);
       setFields(FIXTURE);
       setParsed(FIXTURE);
     } finally {
@@ -109,7 +110,6 @@ export function RfqNew({ onBack, onCreated }: { onBack: () => void; onCreated: (
       budget_min: Number(fields.budget_min),
       budget_max: Number(fields.budget_max),
       timeline_weeks: Number(fields.timeline_weeks),
-      target_unit: Number(fields.budget_max),
     };
     const { error } = await supabase.from("rfqs").insert(row);
     if (error) {
