@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabase";
-import { VENDORS, RFQ_DATA, THREAD_EVENTS } from "@/lib/data";
+import { VENDORS, RFQ_DATA, THREAD_EVENTS, Vendor } from "@/lib/data";
 import { StatusChip } from "@/components/shell";
 import { Icons } from "@/components/icons";
 
@@ -87,10 +87,32 @@ function ThreadEventCard({ ev }: { ev: ThreadEvent }) {
   return null;
 }
 
+type VendorRow = {
+  id: string;
+  rfq_id: string | null;
+  name: string | null;
+  location: string | null;
+  employees: string | null;
+  contact: { name?: string; role?: string; title?: string; linkedin?: string; phone?: string; email?: string } | null;
+  status: string | null;
+  unit_price: number | null;
+  lead_time: number | null;
+  moq: number | null;
+  nre: number | null;
+  certs: string[] | null;
+  capabilities: string[] | null;
+  fit_score: number | null;
+  last_update: string | null;
+  call_duration: string | null;
+  call_outcome: string | null;
+  summary: string | null;
+};
+
 export function VendorDetail({ vendorId, onBack }: { vendorId: string; onBack: () => void }) {
-  const vendor = VENDORS.find((v) => v.id === vendorId) ?? VENDORS[0];
+  const fixtureVendor = VENDORS.find((v) => v.id === vendorId);
+  const [row, setRow] = useState<VendorRow | null>(null);
   const rfq = RFQ_DATA;
-  const [events, setEvents] = useState<ThreadEvent[]>(THREAD_EVENTS);
+  const [events, setEvents] = useState<ThreadEvent[]>(fixtureVendor ? THREAD_EVENTS : []);
   const [tab, setTab] = useState("thread");
   const [draftSubject, setDraftSubject] = useState("Re: RFQ: 500 units CNC aluminum enclosures — final request");
   const [draftBody, setDraftBody] = useState(
@@ -115,24 +137,92 @@ on behalf of Blackbird Robotics`
   const [sent, setSent] = useState(false);
 
   useEffect(() => {
-    supabase
-      .from("thread_events")
-      .select("*")
-      .eq("vendor_id", vendorId)
-      .order("created_at", { ascending: true })
-      .then(({ data }) => {
-        if (data && data.length > 0) {
-          setEvents(data as unknown as ThreadEvent[]);
-        }
-      });
-  }, [vendorId]);
+    let cancelled = false;
+    const fetchAll = async () => {
+      const [vRes, eRes, cRes] = await Promise.all([
+        supabase.from("vendors").select("*").eq("id", vendorId).maybeSingle(),
+        supabase.from("thread_events").select("*").eq("vendor_id", vendorId).order("created_at", { ascending: true }),
+        supabase.from("call_events").select("*").eq("vendor_id", vendorId).order("created_at", { ascending: true }),
+      ]);
+      if (cancelled) return;
+      if (vRes.data) setRow(vRes.data as VendorRow);
+      const thread = (eRes.data ?? []) as unknown as ThreadEvent[];
+      const callEvs = (cRes.data ?? []) as Array<{
+        event_type: string;
+        status: string | null;
+        payload: Record<string, unknown> | null;
+        created_at: string;
+      }>;
+      const callEventCards: ThreadEvent[] = callEvs.map((ce) => ({
+        kind: "agent-note" as const,
+        who: "Vapi · VendrSurf Agent",
+        when: new Date(ce.created_at).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }),
+        body: `${ce.event_type}${ce.status ? ` · ${ce.status}` : ""}${ce.payload ? ` — ${JSON.stringify(ce.payload).slice(0, 240)}` : ""}`,
+      }));
+      const combined = [...thread, ...callEventCards];
+      if (combined.length > 0) setEvents(combined);
+      else if (!fixtureVendor) setEvents([]);
+    };
+    fetchAll();
+    const poll = setInterval(fetchAll, 5000);
+    return () => { cancelled = true; clearInterval(poll); };
+  }, [vendorId, fixtureVendor]);
 
   const send = () => {
     setSending(true);
     setTimeout(() => { setSending(false); setSent(true); }, 1400);
   };
 
-  const initials = vendor.contact.name.split(" ").map((s) => s[0]).join("");
+  const vendor = row
+    ? {
+        id: row.id,
+        name: row.name ?? "Unknown",
+        location: row.location ?? "—",
+        employees: row.employees ?? "—",
+        contact: {
+          name: row.contact?.name ?? "—",
+          role: row.contact?.role ?? row.contact?.title ?? "",
+          linkedin: row.contact?.linkedin,
+          phone: row.contact?.phone,
+          email: row.contact?.email,
+        },
+        status: (row.status ?? "discovered") as Vendor["status"],
+        unitPrice: row.unit_price,
+        leadTime: row.lead_time,
+        moq: row.moq,
+        nre: row.nre,
+        certs: row.certs ?? [],
+        capabilities: row.capabilities ?? [],
+        fitScore: row.fit_score ?? 0,
+        callDuration: row.call_duration ?? "0:00",
+        callOutcome: row.call_outcome ?? "Awaiting outreach",
+        summary: row.summary ?? "",
+      }
+    : (fixtureVendor ?? VENDORS[0]);
+
+  const [calling, setCalling] = useState(false);
+  const [callMsg, setCallMsg] = useState<string | null>(null);
+  const triggerCall = async () => {
+    if (!row?.rfq_id) { setCallMsg("No RFQ linked to this vendor."); return; }
+    setCalling(true); setCallMsg(null);
+    try {
+      const apiBase = process.env.NEXT_PUBLIC_API_URL ?? "";
+      const r = await fetch(`${apiBase}/api/call-vendor`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ rfq_id: row.rfq_id, vendor_id: row.id }),
+      });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j?.message ?? `HTTP ${r.status}`);
+      setCallMsg(`Call triggered · ${j.call_id ?? "ok"}`);
+    } catch (e) {
+      setCallMsg(`Failed: ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setCalling(false);
+    }
+  };
+
+  const initials = (vendor.contact.name || "?").split(" ").map((s) => s[0]).join("");
 
   return (
     <div className="content fade-in" style={{ maxWidth: 1280 }}>
@@ -157,6 +247,12 @@ on behalf of Blackbird Robotics`
             <span style={{ color: "var(--border-strong)" }}>·</span>
             <span className="row" style={{ gap: 4 }}><Icons.Link size={12} />{vendor.contact.linkedin}</span>
           </div>
+        </div>
+        <div className="col" style={{ alignItems: "flex-end", gap: 6 }}>
+          <button className="btn btn-primary" onClick={triggerCall} disabled={calling || !row?.rfq_id}>
+            <Icons.Phone size={13} /> {calling ? "Calling…" : "Call vendor"}
+          </button>
+          {callMsg && <div className="tiny" style={{ color: "var(--text-secondary)" }}>{callMsg}</div>}
         </div>
       </div>
 

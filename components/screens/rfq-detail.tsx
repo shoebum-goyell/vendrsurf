@@ -131,6 +131,28 @@ export function RfqDetail({ rfqId, onBack, onOpenVendor }: { rfqId: string; onBa
     declined: vendors.filter((v) => v.status === "declined").length,
   };
 
+  const [callingId, setCallingId] = useState<string | null>(null);
+  const [callMsg, setCallMsg] = useState<Record<string, string>>({});
+  const triggerCall = async (vendorId: string) => {
+    setCallingId(vendorId);
+    setCallMsg((m) => ({ ...m, [vendorId]: "" }));
+    try {
+      const apiBase = process.env.NEXT_PUBLIC_API_URL ?? "";
+      const r = await fetch(`${apiBase}/api/call-vendor`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ rfq_id: rfqId, vendor_id: vendorId }),
+      });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j?.message ?? `HTTP ${r.status}`);
+      setCallMsg((m) => ({ ...m, [vendorId]: "triggered" }));
+    } catch (e) {
+      setCallMsg((m) => ({ ...m, [vendorId]: e instanceof Error ? e.message : String(e) }));
+    } finally {
+      setCallingId(null);
+    }
+  };
+
   const filtered = vendors.filter((v) => {
     if (filter === "all") return true;
     if (filter === "qualified") return ["qualified", "emailing"].includes(v.status);
@@ -217,6 +239,7 @@ export function RfqDetail({ rfqId, onBack, onOpenVendor }: { rfqId: string; onBa
                 <th style={{ width: 90, textAlign: "right" }}>Lead</th>
                 <th style={{ width: 120 }}>Fit</th>
                 <th style={{ minWidth: 240 }}>Last action</th>
+                <th style={{ width: 110 }}></th>
                 <th style={{ width: 30 }}></th>
               </tr>
             </thead>
@@ -264,6 +287,18 @@ export function RfqDetail({ rfqId, onBack, onOpenVendor }: { rfqId: string; onBa
                         <div className="tiny" style={{ whiteSpace: "nowrap" }}>{v.lastUpdate}</div>
                       </div>
                     </div>
+                  </td>
+                  <td onClick={(e) => e.stopPropagation()}>
+                    <button
+                      className="btn btn-sm btn-primary"
+                      onClick={() => triggerCall(v.id)}
+                      disabled={callingId === v.id}
+                    >
+                      <Icons.Phone size={12} /> {callingId === v.id ? "…" : "Call"}
+                    </button>
+                    {callMsg[v.id] && (
+                      <div className="tiny" style={{ marginTop: 2, color: "var(--text-secondary)" }}>{callMsg[v.id]}</div>
+                    )}
                   </td>
                   <td><Icons.Chev size={13} style={{ color: "var(--text-tertiary)" }} /></td>
                 </tr>
